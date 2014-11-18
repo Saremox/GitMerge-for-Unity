@@ -12,33 +12,46 @@ public class GitMergeWindow : EditorWindow
     private static string sceneName;
     private static string theirSceneName;
 
+    private Vector2 scrollPosition = Vector2.zero;
+
 
     [MenuItem("Window/GitMerge")]
     static void OpenEditor()
     {
-        EditorWindow.GetWindow(typeof(GitMergeWindow), false, "GitMerge");
+        var window = EditorWindow.GetWindow(typeof(GitMergeWindow), false, "GitMerge");
+        //In case we're merging and the scene becomes edited,
+        //the shown SerializedProperties should be repainted
+        window.autoRepaintOnSceneChange = true;
+        window.minSize = new Vector2(500, 100);
+    }
+
+    void OnHierarchyChange()
+    {
+        //Repaint if we changed the scene
+        this.Repaint();
+    }
+
+    void Update()
+    {
+        if(GitMergeAction.inMergePhase
+        &&(EditorApplication.isCompiling
+        || EditorApplication.isPlayingOrWillChangePlaymode))
+        {
+            ShowNotification(new GUIContent("Aborting merge due to editor state change."));
+            AbortMerge();
+        }
     }
 
     void OnGUI()
     {
+        GitMergeResources.DrawLogo();
+
         GUILayout.Label("Open Scene: " + EditorApplication.currentScene);
-        if(GUILayout.Button("Do Stuff"))
+        if(EditorApplication.currentScene != ""
+           && allMergeActions == null
+           && GUILayout.Button("Start merging this scene", GUILayout.Height(80)))
         {
-            GetTheirVersionOf(EditorApplication.currentScene);
-            AssetDatabase.Refresh();
-
-            var ourObjects = GetAllSceneObjects();
-            EditorApplication.OpenSceneAdditive(theirSceneName);
-            AssetDatabase.DeleteAsset(theirSceneName);
-            var addedObjects = GetAllNewSceneObjects(ourObjects);
-            Hide(addedObjects);
-
-            BuildAllMergeActions(ourObjects, addedObjects);
-
-            if(allMergeActions.Count == 0)
-            {
-                allMergeActions = null;
-            }
+            InitializeMerging();
         }
 
 
@@ -48,14 +61,10 @@ public class GitMergeWindow : EditorWindow
             if(allMergeActions != null)
             {
                 done = true;
-                foreach(var actions in allMergeActions)
-                {
-                    actions.OnGUI();
-                    done = done && actions.merged;
-                }
+                done = DisplayMergeActions(done);
             }
             GUILayout.BeginHorizontal();
-            if(done && GUILayout.Button("Done!"))
+            if(done && GUILayout.Button("Apply merge"))
             {
                 CompleteMerge();
             }
@@ -64,6 +73,52 @@ public class GitMergeWindow : EditorWindow
                 AbortMerge();
             }
             GUILayout.EndHorizontal();
+        }
+    }
+
+    private bool DisplayMergeActions(bool done)
+    {
+        scrollPosition = GUILayout.BeginScrollView(scrollPosition, false, true);
+        GUILayout.BeginVertical(GUILayout.MinWidth(480));
+
+        var textColor = GUI.skin.label.normal.textColor;
+        GUI.skin.label.normal.textColor = Color.black;
+
+        foreach(var actions in allMergeActions)
+        {
+            actions.OnGUI();
+            done = done && actions.merged;
+        }
+
+        GUI.skin.label.normal.textColor = textColor;
+
+        GUILayout.EndVertical();
+        GUILayout.EndScrollView();
+        return done;
+    }
+
+    private void InitializeMerging()
+    {
+        GitMergeAction.inMergePhase = false;
+
+        GetTheirVersionOf(EditorApplication.currentScene);
+        AssetDatabase.Refresh();
+
+        var ourObjects = GetAllSceneObjects();
+        EditorApplication.OpenSceneAdditive(theirSceneName);
+        AssetDatabase.DeleteAsset(theirSceneName);
+        var addedObjects = GetAllNewSceneObjects(ourObjects);
+        SetAsMergeObjects(addedObjects);
+
+        BuildAllMergeActions(ourObjects, addedObjects);
+
+        if(allMergeActions.Count == 0)
+        {
+            allMergeActions = null;
+        }
+        else
+        {
+            GitMergeAction.inMergePhase = true;
         }
     }
 
@@ -85,7 +140,7 @@ public class GitMergeWindow : EditorWindow
         return all;
     }
 
-    private void Hide(List<GameObject> objects)
+    private void SetAsMergeObjects(List<GameObject> objects)
     {
         foreach(var obj in objects)
         {
@@ -144,23 +199,27 @@ public class GitMergeWindow : EditorWindow
         }
     }
 
-    private static void CompleteMerge()
+    private void CompleteMerge()
     {
+        GitMergeAction.inMergePhase = false;
+
         GitMergeGameObjectExtensions.DestroyAllMergeObjects();
         EditorApplication.SaveScene();
 
         allMergeActions = null;
 
-        if(EditorUtility.DisplayDialog("Commit Merge", "Do you want to commit the merge now?", "Commit Now", "Commit Later"))
-        {
-            ExecuteGit("reset HEAD");
-            ExecuteGit("add " + sceneName);
-            ExecuteGit("commit -m \"Merged " + sceneName + ".\"");
-        }
+        //Mark as merged for git
+        ExecuteGit("add " + sceneName);
+
+        //directly committing here might not be that smart, since there might be more conflicts
+
+        ShowNotification(new GUIContent("Scene successfully merged."));
     }
 
     private static void AbortMerge()
     {
+        GitMergeAction.inMergePhase = false;
+
         foreach(var actions in allMergeActions)
         {
             actions.UseOurs();

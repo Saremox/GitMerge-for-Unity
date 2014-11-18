@@ -6,13 +6,13 @@ public static class GitMergeGameObjectExtensions
 {
     //This dict holds all of "their" GameObjects
     //<GameObject, originallyActive>
-    private static Dictionary<GameObject, bool> objects = new Dictionary<GameObject, bool>();
+    private static Dictionary<GameObject, bool> theirObjects = new Dictionary<GameObject, bool>();
 
 	public static void SetAsMergeObject(this GameObject go, bool active)
     {
-        if(!objects.ContainsKey(go))
+        if(!theirObjects.ContainsKey(go))
         {
-            objects.Add(go, go.activeSelf);
+            theirObjects.Add(go, go.activeSelf);
         }
         go.SetActiveForMerging(false);
     }
@@ -28,7 +28,7 @@ public static class GitMergeGameObjectExtensions
         var copy = GameObject.Instantiate(go) as GameObject;
         
         bool wasActive;
-        if(!objects.TryGetValue(go, out wasActive))
+        if(!theirObjects.TryGetValue(go, out wasActive))
         {
             wasActive = go.activeSelf;
         }
@@ -42,11 +42,11 @@ public static class GitMergeGameObjectExtensions
 
     public static void DestroyAllMergeObjects()
     {
-        foreach(var obj in objects.Keys)
+        foreach(var obj in theirObjects.Keys)
         {
             Object.DestroyImmediate(obj);
         }
-        objects.Clear();
+        theirObjects.Clear();
     }
     
     public static Component AddComponent(this GameObject go, Component original)
@@ -69,5 +69,17 @@ public static class GitMergeGameObjectExtensions
         }
         
         return c;
+    }
+
+    public static void Highlight(this GameObject go)
+    {
+        Selection.activeGameObject = go;
+        EditorGUIUtility.PingObject(go);
+
+        var view = SceneView.lastActiveSceneView;
+        if(view)
+        {
+            view.FrameSelected();
+        }
     }
 }

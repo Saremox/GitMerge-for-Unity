@@ -16,10 +16,13 @@ public class GitMergeActionChangeValues : GitMergeAction
     {
         get { return theirInitialValue != null ? theirInitialValue.ToString() : "[none]"; }
     }
+    protected Component ourComponent;
 
-    public GitMergeActionChangeValues(GameObject ours, GameObject theirs, SerializedProperty ourProperty, SerializedProperty theirProperty)
-        : base(ours, theirs)
+    public GitMergeActionChangeValues(GameObject ours, Component ourComponent, SerializedProperty ourProperty, SerializedProperty theirProperty)
+        : base(ours, null)
     {
+        this.ourComponent = ourComponent;
+
         this.ourProperty = ourProperty;
         this.theirProperty = theirProperty;
 
@@ -41,16 +44,49 @@ public class GitMergeActionChangeValues : GitMergeAction
 
     public override void OnGUI()
     {
+        GUILayout.BeginVertical();
+        GUILayout.Label(ourComponent.GetPlainType() + "." + ourProperty.GetPlainName());
+
+        GUILayout.BeginHorizontal();
+
         GUILayout.Label(ourString, GUILayout.Width(100));
-        if(GUILayout.Button(">>>"))
+
+        if(MergeButton(">>>", usingOurs))
         {
             UseOurs();
         }
-        EditorGUILayout.PropertyField(ourProperty);
-        if(GUILayout.Button("<<<"))
+
+        var c = GUI.backgroundColor;
+        GUI.backgroundColor = Color.white;
+
+        var oldValue = ourProperty.GetValue();
+        EditorGUILayout.PropertyField(ourProperty, new GUIContent(""), GUILayout.Width(170));
+        if(!object.Equals(ourProperty.GetValue(), oldValue))
+        {
+            ourProperty.serializedObject.ApplyModifiedProperties();
+            UsedNew();
+        }
+
+        GUI.backgroundColor = c;
+
+        if(MergeButton("<<<", usingTheirs))
         {
             UseTheirs();
         }
         GUILayout.Label(theirString, GUILayout.Width(100));
+
+        GUILayout.EndHorizontal();
+        GUILayout.EndVertical();
+    }
+
+    private static bool MergeButton(string text, bool green)
+    {
+        if(green)
+        {
+            GUI.color = Color.green;
+        }
+        bool result = GUILayout.Button(text, GUILayout.ExpandWidth(false));
+        GUI.color = Color.white;
+        return result;
     }
 }

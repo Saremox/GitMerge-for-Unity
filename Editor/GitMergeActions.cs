@@ -107,7 +107,7 @@ public class GitMergeActions
 
                 if(!ourProperty.GetValue(true).Equals(theirProperty.GetValue(true)))
                 {
-                    actions.Add(new GitMergeActionChangeValues(ours, theirs, ourProperty.Copy(), theirProperty.Copy()));
+                    actions.Add(new GitMergeActionChangeValues(ours, ourComponent, ourProperty.Copy(), theirProperty.Copy()));
                 }
             }
         }
@@ -138,16 +138,42 @@ public class GitMergeActions
         }
     }
 
+
+    private bool open;
     public void OnGUI()
     {
-        GUILayout.Label(name);
-        foreach(var action in actions)
+        if(open)
         {
-            if(action.OnGUIMerge())
+            GUI.backgroundColor = new Color(0, 0, 0, .8f);
+        }
+        else
+        {
+            GUI.backgroundColor = merged ? new Color(0, .5f, 0, .8f) : new Color(.5f, 0, 0, .8f);
+        }
+        GUILayout.BeginVertical(GitMergeResources.styles.mergeActions);
+        GUI.backgroundColor = Color.white;
+
+        GUILayout.BeginHorizontal();
+        open = EditorGUILayout.Foldout(open, new GUIContent(name));
+
+        if(GUILayout.Button("Focus", EditorStyles.miniButton, GUILayout.Width(100)))
+        {
+            ours.Highlight();
+        }
+        GUILayout.EndHorizontal();
+
+        if(open)
+        {
+            foreach(var action in actions)
             {
-                CheckIfMerged();
+                if(action.OnGUIMerge())
+                {
+                    CheckIfMerged();
+                }
             }
         }
+        GUILayout.EndVertical();
+
         GUI.backgroundColor = Color.white;
     }
 
